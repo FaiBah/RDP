@@ -10,133 +10,92 @@ jobs:
 
     steps:
       - name: Configure Core RDP Settings
-        shell: powershell
         run: |
-          # Enable Remote Desktop (keep NLA enabled for safety)
+          # Enable Remote Desktop and disable Network Level Authentication (if needed)
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' `
-            -Name "fDenyTSConnections" -Value 0 -Force
+                             -Name "fDenyTSConnections" -Value 0 -Force
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' `
+                             -Name "UserAuthentication" -Value 0 -Force
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' `
+                             -Name "SecurityLayer" -Value 0 -Force
 
-          # Do NOT disable UserAuthentication (NLA) or set SecurityLayer to 0 — keep defaults for security
-
-          # Remove any existing rule with same name (ignore errors)
-          netsh advfirewall firewall delete rule name="RDP-Tailscale" 2>$null
-
-          # Allow RDP only from Tailscale's typical CGNAT space (restrict exposure)
+          # Remove any existing rule with the same name to avoid duplication
+          netsh advfirewall firewall delete rule name="RDP-Tailscale"
+          
+          # For testing, allow any incoming connection on port 3389
           netsh advfirewall firewall add rule name="RDP-Tailscale" `
-            dir=in action=allow protocol=TCP localport=3389 remoteip=100.64.0.0/10 profile=any
+            dir=in action=allow protocol=TCP localport=3389
 
-          # Restart Remote Desktop service to ensure changes take effect
+          # (Optional) Restart the Remote Desktop service to ensure changes take effect
           Restart-Service -Name TermService -Force
 
-      - name: Create RDP User with Fixed Password
-        shell: powershell
+      - name: Create RDP User with Secure Password
         run: |
-          # Define the fixed password (e.g., '123')
-          $pw = "123"
-
-          # Convert to SecureString
-          $securePass = $pw
-
-          # Check if the user already exists; if so, reset the password
-          if (Get-LocalUser -Name "RDP" -ErrorAction SilentlyContinue) {
-              Set-LocalUser -Name "RDP" -Password $securePass
-          } else {
-              # Create the user with the fixed password
-              New-LocalUser -Name "RDP" -Password $securePass -AccountNeverExpires -PasswordNeverExpires
-          }
-
-          # Add the user to Remote Desktop Users group (no Administrators group)
+          Add-Type -AssemblyName System.Security
+          $password = "123"
+          $securePass = $password
+          New-LocalUser -Name "RDP" -Password $securePass -AccountNeverExpires
+          Add-LocalGroupMember -Group "Administrators" -Member "RDP"
           Add-LocalGroupMember -Group "Remote Desktop Users" -Member "RDP"
-
-          # Mask the password in GitHub Actions logs for security
-          Write-Output "::add-mask::$pw"
-
-          # Write credentials to a temp file for artifact upload
-          $credsFile = Join-Path $env:RUNNER_TEMP "rdp_creds.txt"
-          "Username: RDP" | Out-File -FilePath $credsFile -Encoding utf8
-          "Password: $pw"     | Out-File -FilePath $credsFile -Append -Encoding utf8
-          Write-Output "CREDS_FILE=$credsFile" >> $env:GITHUB_ENV
-
-          # Safety check if user creation was successful
+          
+          echo "RDP_CREDS=User: RDP | Password: $password" >> $env:GITHUB_ENV
+          
           if (-not (Get-LocalUser -Name "RDP")) {
               Write-Error "User creation failed"
               exit 1
           }
 
       - name: Install Tailscale
-        shell: powershell
         run: |
-          # Use the general stable installer that resolves to latest stable for your platform
-          $tsUrl = "https://pkgs.tailscale.com/stable/tailscale-setup.msi"
-          $installerPath = Join-Path $env:TEMP "tailscale.msi"
-
-          Invoke-WebRequest -Uri $tsUrl -OutFile $installerPath -UseBasicParsing
+          $tsUrl = "https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi"
+          $installerPath = "$env:TEMP\tailscale.msi"
+          
+          Invoke-WebRequest -Uri $tsUrl -OutFile $installerPath
           Start-Process msiexec.exe -ArgumentList "/i", "`"$installerPath`"", "/quiet", "/norestart" -Wait
           Remove-Item $installerPath -Force
 
       - name: Establish Tailscale Connection
-        shell: powershell
-        env:
-          TAILSCALE_AUTH_KEY: ${{ secrets.TAILSCALE_AUTH_KEY }}
         run: |
-          $exe = Join-Path $env:ProgramFiles "Tailscale\tailscale.exe"
-          if (-not (Test-Path $exe)) {
-              Write-Error "Tailscale not found at $exe"
-              exit 1
-          }
-
-          & $exe up --authkey=$env:TAILSCALE_AUTH_KEY --hostname=gh-runner-$env:GITHUB_RUN_ID
-
-          # Wait for an IPv4 Tailscale IP
+          # Bring up Tailscale with the provided auth key and set a unique hostname
+          & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-runner-$env:GITHUB_RUN_ID
+          
+          # Wait for Tailscale to assign an IP
           $tsIP = $null
-          for ($i=0; $i -lt 20 -and -not $tsIP; $i++) {
-              Start-Sleep -Seconds 3
-              $ipsRaw = & $exe ip -4 2>$null
-              $ips = $ipsRaw -split "`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ -match '\d+\.\d+\.\d+\.\d+' }
-              if ($ips) { $tsIP = $ips[0] }
+          $retries = 0
+          while (-not $tsIP -and $retries -lt 10) {
+              $tsIP = & "$env:ProgramFiles\Tailscale\tailscale.exe" ip -4
+              Start-Sleep -Seconds 5
+              $retries++
           }
-
+          
           if (-not $tsIP) {
               Write-Error "Tailscale IP not assigned. Exiting."
               exit 1
           }
-
-          Write-Output "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
-          Write-Host "Assigned Tailscale IP: $tsIP"
-
+          echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
+      
       - name: Verify RDP Accessibility
-        shell: powershell
         run: |
-          $ip = $env:TAILSCALE_IP
-          Write-Host "Testing RDP connectivity to $ip:3389 ..."
-          $test = Test-NetConnection -ComputerName $ip -Port 3389 -WarningAction SilentlyContinue
-          if (-not $test.TcpTestSucceeded) {
+          Write-Host "Tailscale IP: $env:TAILSCALE_IP"
+          
+          # Test connectivity using Test-NetConnection against the Tailscale IP on port 3389
+          $testResult = Test-NetConnection -ComputerName $env:TAILSCALE_IP -Port 3389
+          if (-not $testResult.TcpTestSucceeded) {
               Write-Error "TCP connection to RDP port 3389 failed"
               exit 1
           }
           Write-Host "TCP connectivity successful!"
 
-      - name: Upload credentials artifact (secure)
-        uses: actions/upload-artifact@v4
-        with:
-          name: rdp-credentials
-          path: ${{ env.CREDS_FILE }}
-          retention-days: 1
-
-      - name: Maintain Connection (finite)
-        shell: powershell
+      - name: Maintain Connection
         run: |
           Write-Host "`n=== RDP ACCESS ==="
           Write-Host "Address: $env:TAILSCALE_IP"
           Write-Host "Username: RDP"
-          Write-Host "Credentials uploaded as artifact 'rdp-credentials' (retention: 1 day)."
+          Write-Host "Password: $(echo $env:RDP_CREDS)"
           Write-Host "==================`n"
-
-          # Keep runner active for 60 minutes (adjust as needed; avoid infinite loops)
-          $minutesToKeep = 60
-          for ($i=0; $i -lt $minutesToKeep; $i++) {
-              Write-Host "[$(Get-Date -Format o)] RDP Active - sleeping ($($minutesToKeep - $i) minutes left)"
-              Start-Sleep -Seconds 60
+          
+          # Keep runner active indefinitely (or until manually cancelled)
+          while ($true) {
+              Write-Host "[$(Get-Date)] RDP Active - Use Ctrl+C in workflow to terminate"
+              Start-Sleep -Seconds 300
           }
-
-          Write-Host "Maintenance period complete. Workflow will finish, Tailscale will remain installed but runner will return to pool."
