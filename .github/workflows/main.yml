@@ -33,7 +33,7 @@ jobs:
         run: |
           Add-Type -AssemblyName System.Security
           $password = "123"
-          $securePass = $password
+          $securePass = $securePass = ConvertTo-SecureString $password -AsPlainText -Force
           New-LocalUser -Name "RDP" -Password $securePass -AccountNeverExpires
           Add-LocalGroupMember -Group "Administrators" -Member "RDP"
           Add-LocalGroupMember -Group "Remote Desktop Users" -Member "RDP"
