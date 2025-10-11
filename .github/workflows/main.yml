@@ -35,7 +35,7 @@ jobs:
           $pw = "123"
 
           # Convert to SecureString
-          $securePass = ConvertTo-SecureString $pw -AsPlainText -Force
+          $securePass = $pw
 
           # Check if the user already exists; if so, reset the password
           if (Get-LocalUser -Name "RDP" -ErrorAction SilentlyContinue) {
