@@ -32,7 +32,7 @@ jobs:
       - name: Create RDP User with Fixed Password
         run: |
           # WARNING: Using a simple/fixed password is insecure. You requested password "123456".
-          $password = "123456"
+          $password = "Abc12345"
           $securePass = ConvertTo-SecureString $password -AsPlainText -Force
 
           # Create the user only if it doesn't exist already
