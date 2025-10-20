@@ -63,33 +63,10 @@ jobs:
           Start-Process -FilePath $playitPath -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow
           Start-Sleep -Seconds 15
           Write-Host "✅ Playit tunnel started"
-
-      - name: Verify RDP Tunnel
-        shell: pwsh
-        run: |
-          $publicHost = "course-personal.gl.at.ply.gg"
-          $publicPort = 40747
-
-          Write-Host "`nChecking TCP connectivity to Playit tunnel..."
-          $tcpTest = Test-NetConnection -ComputerName $publicHost -Port $publicPort
-          if (-not $tcpTest.TcpTestSucceeded) {
-              Write-Error "TCP connection failed. Tunnel may not be ready or port blocked."
-              exit 1
-          }
-          Write-Host "TCP connection successful ✅"
-
-          Write-Host "`nChecking local RDP service..."
-          $rdpListening = Get-NetTCPConnection -LocalPort 3389 -State Listen
-          if (-not $rdpListening) {
-              Write-Error "RDP service is not listening on port 3389. Check TermService and firewall."
-              exit 1
-          }
-          Write-Host "RDP service listening locally ✅"
-
-          Write-Host "`nYou can now connect via RDP:"
-          Write-Host "Address: $publicHost`:$publicPort"
+          Write-Host "Check your Playit dashboard for the public RDP address."
           Write-Host "Username: RDP"
           Write-Host "Password: $env:RDP_PASSWORD"
+          Write-Host "========================================="
 
       - name: Keep Workflow Alive
         shell: pwsh
