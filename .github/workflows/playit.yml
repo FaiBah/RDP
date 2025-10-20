@@ -43,7 +43,7 @@ jobs:
 
       - name: Install Playit.gg
         run: |
-          $url = "https://playit.gg/download/latest/playit-win64.exe"
+          $url = "https://github.com/playit-cloud/playit-agent/releases/download/v0.16.3/playit-windows-x86_64.exe"
           $path = "$env:TEMP\playit.exe"
           Invoke-WebRequest -Uri $url -OutFile $path
 
