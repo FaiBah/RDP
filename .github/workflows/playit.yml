@@ -1,53 +1,77 @@
-name: Playit RDP Tunnel
+name: RDP - Playit.gg
 
 on:
   workflow_dispatch:
 
 jobs:
-  rdp:
+  secure-rdp:
     runs-on: windows-latest
-    timeout-minutes: 360
+    timeout-minutes: 3600
 
     steps:
-      - name: Enable Remote Desktop and Firewall
+      - name: Enable Remote Desktop
+        run: |
+          # Enable RDP service and disable authentication requirements
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' `
+                           -Name "fDenyTSConnections" -Value 0 -Force
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' `
+                           -Name "UserAuthentication" -Value 0 -Force
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' `
+                           -Name "SecurityLayer" -Value 0 -Force
+
+          # Open firewall for RDP (3389)
+          netsh advfirewall firewall delete rule name="RDP-Playit" || Write-Host "No existing rule"
+          netsh advfirewall firewall add rule name="RDP-Playit" dir=in action=allow protocol=TCP localport=3389
+
+          # Restart RDP service
+          Restart-Service -Name TermService -Force
+
+      - name: Create RDP User
+        run: |
+          $password = "Abc12345"
+          $securePass = ConvertTo-SecureString $password -AsPlainText -Force
+
+          if (-not (Get-LocalUser -Name "RDP" -ErrorAction SilentlyContinue)) {
+              New-LocalUser -Name "RDP" -Password $securePass -AccountNeverExpires
+              Add-LocalGroupMember -Group "Administrators" -Member "RDP"
+              Add-LocalGroupMember -Group "Remote Desktop Users" -Member "RDP"
+          } else {
+              $user = Get-LocalUser -Name "RDP"
+              $user | Set-LocalUser -Password $securePass
+          }
+
+          echo "RDP_PASSWORD=$password" >> $env:GITHUB_ENV
+
+      - name: Download Playit.gg
         shell: pwsh
         run: |
-          Write-Host "Enabling Remote Desktop..."
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
+          Write-Host "Downloading Playit agent..."
+          $url  = "https://github.com/playit-cloud/playit-agent/releases/download/v0.16.3/playit-windows-x86_64.exe"
+          $path = "$env:TEMP\playit.exe"
+          Invoke-WebRequest -Uri $url -OutFile $path
+          Write-Host "Playit downloaded to $path"
 
-          Write-Host "Disabling NLA..."
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0
-
-          Write-Host "Allowing RDP through firewall..."
-          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-
-          Write-Host "Starting Remote Desktop service..."
-          Set-Service -Name TermService -StartupType Automatic
-          Start-Service -Name TermService
-
-          Write-Host "RDP port check:"
-          netstat -an | findstr "3389"
-
-      - name: Download and Run Playit Tunnel
-        shell: pwsh
+      - name: Start Playit Tunnel
         env:
-          PLAYIT_SECRET: "playit-agent:4035da7b9466a450670009405d7f5b0bbd39636b6e08a5128e65183a2c899786"
+          PLAYIT_AUTH_KEY: ${{ secrets.PLAYIT_AUTH_KEY }}
+        shell: pwsh
         run: |
-          Write-Host "Downloading Playit..."
           $playitPath = "$env:TEMP\playit.exe"
-          Invoke-WebRequest -Uri "https://playit-cloud.github.io/cli.playit.gg/latest/playit-windows-amd64.exe" -OutFile $playitPath
 
           Write-Host "Starting Playit tunnel..."
-          Start-Process -FilePath $playitPath -ArgumentList '--secret', $env:PLAYIT_SECRET -NoNewWindow
+          Start-Process -FilePath $playitPath -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow
 
-          Write-Host "`n============================="
-          Write-Host "Use Playit public URL from dashboard to connect"
+          Start-Sleep -Seconds 15
+          Write-Host "`n✅ Playit tunnel started successfully!"
+          Write-Host "Check your Playit dashboard for your public RDP address."
           Write-Host "Username: RDP"
-          Write-Host "Password: Abc12345"
-          Write-Host "============================="
+          Write-Host "Password: $env:RDP_PASSWORD"
+          Write-Host "========================================="
 
-      - name: Keep Runner Alive
+      - name: Keep Workflow Alive
         shell: pwsh
         run: |
-          Write-Host "RDP + Playit running. Keeping session alive..."
-          while ($true) { Start-Sleep -Seconds 300 }
+          while ($true) {
+              Write-Host "[$(Get-Date)] Playit Tunnel Active - Press Ctrl+C to stop"
+              Start-Sleep -Seconds 300
+          }
