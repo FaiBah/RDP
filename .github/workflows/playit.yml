@@ -49,7 +49,7 @@ jobs:
           $url  = "https://github.com/playit-cloud/playit-agent/releases/download/v0.16.3/playit-windows-x86_64.exe"
           $path = "$env:TEMP\playit.exe"
           Invoke-WebRequest -Uri $url -OutFile $path
-          Write-Host "Playit downloaded to $path"
+          Write-Host "✅ Playit downloaded to $path"
 
       - name: Start Playit Tunnel
         env:
@@ -59,19 +59,12 @@ jobs:
           $playitPath = "$env:TEMP\playit.exe"
 
           Write-Host "Starting Playit tunnel..."
-          Start-Process -FilePath $playitPath -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow
-
-          Start-Sleep -Seconds 15
-          Write-Host "`n✅ Playit tunnel started successfully!"
-          Write-Host "Check your Playit dashboard for your public RDP address."
-          Write-Host "Username: RDP"
-          Write-Host "Password: $env:RDP_PASSWORD"
-          Write-Host "========================================="
+          & $playitPath --secret "$env:PLAYIT_AUTH_KEY" --proto tcp --local 3389 --name "GitHub-RDP"
 
       - name: Keep Workflow Alive
         shell: pwsh
         run: |
           while ($true) {
-              Write-Host "[$(Get-Date)] Playit Tunnel Active - Press Ctrl+C to stop"
+              Write-Host "[$(Get-Date)] ✅ Playit Tunnel Active — check your Playit dashboard for the tunnel address"
               Start-Sleep -Seconds 300
           }
