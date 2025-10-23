@@ -22,8 +22,7 @@ jobs:
           netsh advfirewall firewall delete rule name="RDP-Tailscale" || Write-Host "No existing rule to delete"
           
           # Allow incoming connections on port 3389
-          netsh advfirewall firewall add rule name="RDP-Tailscale" `
-            dir=in action=allow protocol=TCP localport=3389
+          netsh advfirewall firewall add rule name="RDP-Tailscale" dir=in action=allow protocol=TCP localport=3389
 
           # Restart the Remote Desktop service
           Restart-Service -Name TermService -Force
@@ -98,8 +97,11 @@ jobs:
           PLAYIT_AUTH_KEY: ${{ secrets.PLAYIT_AUTH_KEY }}
         run: |
           $playitPath = "$env:TEMP\playit.exe"
+          $protocol = "tcp"          # change to "udp" if needed
+          $port = 3389               # change to your desired local port
+
           Write-Host "Starting Playit tunnel..."
-          Start-Process -FilePath $playitPath -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow
+          Start-Process -FilePath $playitPath -ArgumentList "--secret $env:PLAYIT_AUTH_KEY --protocol $protocol --port $port" -NoNewWindow
           Start-Sleep -Seconds 15
           Write-Host "✅ Playit tunnel started"
           Write-Host "Check your Playit dashboard for the public RDP address."
