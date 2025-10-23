@@ -82,26 +82,35 @@ jobs:
           }
           Write-Host "TCP connectivity successful!"
 
-      - name: Download Playit.gg
+      - name: Download Ngrok
         shell: pwsh
         run: |
-          Write-Host "Downloading Playit agent..."
-          $url  = "https://github.com/playit-cloud/playit-agent/releases/download/v0.16.3/playit-windows-x86_64.exe"
-          $path = "$env:TEMP\playit.exe"
-          Invoke-WebRequest -Uri $url -OutFile $path
-          Write-Host "Playit downloaded to $path"
+          Write-Host "Downloading Ngrok..."
+          $url  = "https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-stable-windows-amd64.zip"
+          $zipPath = "$env:TEMP\ngrok.zip"
+          $exePath = "$env:TEMP\ngrok.exe"
+          Invoke-WebRequest -Uri $url -OutFile $zipPath
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          [System.IO.Compression.ZipFile]::ExtractToDirectory($zipPath, $env:TEMP)
+          Write-Host "Ngrok downloaded to $exePath"
 
-      - name: Start Playit Tunnel
+      - name: Start Ngrok TCP Tunnel for RDP
         shell: pwsh
         env:
-          PLAYIT_AUTH_KEY: ${{ secrets.PLAYIT_AUTH_KEY }}
+          NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
+          RDP_USER: ${{ secrets.RDP_USER }}
+          RDP_PASSWORD: ${{ secrets.RDP_PASSWORD }}
         run: |
-          $playitPath = "$env:TEMP\playit.exe"
-          Write-Host "Starting Playit tunnel..."
-          Start-Process -FilePath $playitPath -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow
-          Start-Sleep -Seconds 15
-          Write-Host "✅ Playit tunnel started"
-          Write-Host "Check your Playit dashboard for the public RDP address."
+          $ngrokPath = "$env:TEMP\ngrok.exe"
+          Write-Host "Authenticating Ngrok..."
+          & $ngrokPath authtoken $env:NGROK_AUTH_TOKEN
+      
+          Write-Host "Starting Ngrok TCP tunnel for RDP..."
+          Start-Process -FilePath $ngrokPath -ArgumentList "tcp 3389" -NoNewWindow
+          Start-Sleep -Seconds 10
+      
+          Write-Host "✅ Ngrok tunnel started"
+          Write-Host "Check the Ngrok output logs for the public RDP address."
           Write-Host "Username: $env:RDP_USER"
           Write-Host "Password: $env:RDP_PASSWORD"
           Write-Host "========================================="
