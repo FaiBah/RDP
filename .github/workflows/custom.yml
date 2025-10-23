@@ -15,16 +15,25 @@ jobs:
           Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -Value 0
           Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
 
-      - name: Download Playit CLI
+      - name: Download Playit Agent
         run: |
           Invoke-WebRequest -Uri https://github.com/playit-cloud/playit-agent/releases/download/v0.16.3/playit-windows-x86_64.exe -OutFile playit.exe
 
-      - name: Start Playit tunnel and capture URL
+      - name: Login and start RDP tunnel
         id: playit
         run: |
-          $output = Start-Process -FilePath playit.exe -ArgumentList "authtoken $env:PLAYIT_AUTH_KEY" -NoNewWindow -PassThru -Wait -RedirectStandardOutput temp.txt
-          $url = Select-String -Path temp.txt -Pattern "RDP" | ForEach-Object { $_.Line }
-          Write-Output "RDP_URL=$url" >> $env:GITHUB_ENV
+          # Login using auth key from secret
+          echo $env:PLAYIT_AUTH_KEY | ./playit.exe login
+
+          # Start RDP tunnel in background
+          Start-Process -FilePath ./playit.exe -ArgumentList "rdp start" -NoNewWindow
+
+          # Wait a few seconds for the tunnel to initialize
+          Start-Sleep -Seconds 5
+
+          # Get RDP public URL
+          $output = ./playit.exe rdp status
+          Write-Output "RDP_URL=$output" >> $env:GITHUB_ENV
         env:
           PLAYIT_AUTH_KEY: ${{ secrets.PLAYIT_AUTH_KEY }}
 
