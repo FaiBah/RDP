@@ -1,12 +1,12 @@
-name: Windows RDP with Playit [Custom]
+name: Windows RDP with Playit (auto URL)
 
 on:
-  workflow_dispatch:   # Manual trigger
+  workflow_dispatch:
 
 jobs:
   rdp:
     runs-on: windows-latest
-    timeout-minutes: 360   # 6 hours
+    timeout-minutes: 360
 
     steps:
       - name: Enable RDP and set password
@@ -15,10 +15,16 @@ jobs:
           Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -Value 0
           Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
 
-      - name: Download and start Playit tunnel
+      - name: Download Playit CLI
         run: |
-          Invoke-WebRequest -Uri https://github.com/playit-cloud/playit-agent/releases/download/v0.16.3/playit-windows-x86_64.exe -OutFile playit.exe
-          Start-Process -FilePath playit.exe -ArgumentList "authtoken $env:PLAYIT_AUTH_KEY" -NoNewWindow
+          Invoke-WebRequest -Uri https://playit.gg/downloads/playit-windows-amd64.exe -OutFile playit.exe
+
+      - name: Start Playit tunnel and capture URL
+        id: playit
+        run: |
+          $output = Start-Process -FilePath playit.exe -ArgumentList "authtoken $env:PLAYIT_AUTH_KEY" -NoNewWindow -PassThru -Wait -RedirectStandardOutput temp.txt
+          $url = Select-String -Path temp.txt -Pattern "RDP" | ForEach-Object { $_.Line }
+          Write-Output "RDP_URL=$url" >> $env:GITHUB_ENV
         env:
           PLAYIT_AUTH_KEY: ${{ secrets.PLAYIT_AUTH_KEY }}
 
@@ -28,6 +34,5 @@ jobs:
           Write-Host "✅ RDP is ready!"
           Write-Host "👤 Username: runneradmin"
           Write-Host "🔑 Password: MyStrongPassword123!"
-          Write-Host "🌍 Use Playit dashboard to get your RDP address (port 3389)"
+          Write-Host "🌍 Playit RDP URL: $env:RDP_URL"
           Write-Host "============================================================"
-
