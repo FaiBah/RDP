@@ -17,7 +17,7 @@ jobs:
 
       - name: Download Playit CLI
         run: |
-          Invoke-WebRequest -Uri https://playit.gg/downloads/playit-windows-amd64.exe -OutFile playit.exe
+          Invoke-WebRequest -Uri https://github.com/playit-cloud/playit-agent/releases/download/v0.16.3/playit-windows-x86_64.exe -OutFile playit.exe
 
       - name: Start Playit tunnel and capture URL
         id: playit
