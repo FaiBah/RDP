@@ -17,7 +17,7 @@ jobs:
 
       - name: Download and start Playit tunnel
         run: |
-          Invoke-WebRequest -Uri https://playit.gg/downloads/playit-windows-amd64.exe -OutFile playit.exe
+          Invoke-WebRequest -Uri https://github.com/playit-cloud/playit-agent/releases/download/v0.16.3/playit-windows-x86_64.exe -OutFile playit.exe
           Start-Process -FilePath playit.exe -ArgumentList "authtoken $env:PLAYIT_AUTH_KEY" -NoNewWindow
         env:
           PLAYIT_AUTH_KEY: ${{ secrets.PLAYIT_AUTH_KEY }}
