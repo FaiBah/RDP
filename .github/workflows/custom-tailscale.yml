@@ -1,4 +1,4 @@
-name: RDP [Tailscale]
+name: RDP - Tailscale
 
 on:
   workflow_dispatch:
@@ -35,11 +35,12 @@ jobs:
           $securePass = ConvertTo-SecureString $password -AsPlainText -Force
 
           # Reset password for runneradmin
-          if (Get-LocalUser -Name "runneradmin" -ErrorAction SilentlyContinue) 
+          if (Get-LocalUser -Name "runneradmin" -ErrorAction SilentlyContinue) {
               Set-LocalUser -Name "runneradmin" -Password $securePass
-          else 
+          } else {
               Write-Error "User 'runneradmin' not found."
               exit 1
+          }
 
           echo "RDP_USER=runneradmin" >> $env:GITHUB_ENV
           echo "RDP_PASSWORD=$password" >> $env:GITHUB_ENV
