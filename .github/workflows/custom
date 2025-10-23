@@ -1,0 +1,32 @@
+name: Windows RDP with Playit
+
+on:
+  workflow_dispatch:   # Manual trigger
+
+jobs:
+  rdp:
+    runs-on: windows-latest
+    timeout-minutes: 360   # 6 hours
+
+    steps:
+      - name: Enable RDP and set password
+        run: |
+          net user runneradmin MyStrongPassword123!
+          Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -Value 0
+          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+
+      - name: Download and start Playit tunnel
+        run: |
+          Invoke-WebRequest -Uri https://playit.gg/downloads/playit-windows-amd64.exe -OutFile playit.exe
+          Start-Process -FilePath playit.exe -ArgumentList "authtoken $env:PLAYIT_AUTH_KEY" -NoNewWindow
+        env:
+          PLAYIT_AUTH_KEY: ${{ secrets.PLAYIT_AUTH_KEY }}
+
+      - name: Show login info
+        run: |
+          echo ============================================================
+          echo ✅ RDP is ready!
+          echo 👤 Username: runneradmin
+          echo 🔑 Password: MyStrongPassword123!
+          echo 🌍 Use Playit dashboard to get your RDP address (port 3389)
+          echo ============================================================
