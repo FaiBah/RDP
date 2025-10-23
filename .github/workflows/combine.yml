@@ -93,7 +93,7 @@ jobs:
           Add-Type -AssemblyName System.IO.Compression.FileSystem
           [System.IO.Compression.ZipFile]::ExtractToDirectory($zipPath, $env:TEMP)
           Write-Host "Ngrok downloaded to $exePath"
-
+      
       - name: Start Ngrok TCP Tunnel for RDP
         shell: pwsh
         env:
@@ -106,14 +106,22 @@ jobs:
           & $ngrokPath authtoken $env:NGROK_AUTH_TOKEN
       
           Write-Host "Starting Ngrok TCP tunnel for RDP..."
-          Start-Process -FilePath $ngrokPath -ArgumentList "tcp 3389" -NoNewWindow
+          $ngrokProcess = Start-Process -FilePath $ngrokPath -ArgumentList "tcp 3389 --log=stdout" -RedirectStandardOutput "$env:TEMP\ngrok.log" -PassThru
+      
+          # Wait a few seconds for the tunnel to start
           Start-Sleep -Seconds 10
       
-          Write-Host "✅ Ngrok tunnel started"
-          Write-Host "Check the Ngrok output logs for the public RDP address."
-          Write-Host "Username: $env:RDP_USER"
-          Write-Host "Password: $env:RDP_PASSWORD"
-          Write-Host "========================================="
+          # Read Ngrok log to find public TCP address
+          $log = Get-Content "$env:TEMP\ngrok.log" -Raw
+          if ($log -match "tcp://([\d\.]+:\d+)") {
+              $publicAddress = $matches[1]
+              Write-Host "✅ Ngrok tunnel started!"
+              Write-Host "Public RDP address: $publicAddress"
+              Write-Host "Username: $env:RDP_USER"
+              Write-Host "Password: $env:RDP_PASSWORD"
+          } else {
+              Write-Host "❌ Failed to detect Ngrok public address. Check logs at $env:TEMP\ngrok.log"
+          }
 
       - name: Show login info
         run: |
